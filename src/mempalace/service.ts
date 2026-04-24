@@ -23,6 +23,7 @@ import type {
   MemPalaceInventoryRow,
   MemPalaceSyncResult
 } from "./types.js";
+import { MEMPALACE_INVENTORY_SCOPE_EOF } from "./types.js";
 
 interface NormalizedWing {
   name: string;
@@ -319,6 +320,18 @@ export class MemPalaceService {
     const taxonomySummary = summarizeTaxonomy(audit.taxonomy);
     const inventory = await loadMemPalaceInventory(this.config);
     const cursor = await loadMemPalaceCursor(this.config);
+    if (
+      cursor.inventoryAuditRevision != null &&
+      cursor.inventoryAuditRevision !== audit.revision
+    ) {
+      cursor.inventory = {};
+    }
+    cursor.inventoryAuditRevision = audit.revision;
+    for (const key of Object.keys(cursor.inventory)) {
+      if (cursor.inventory[key] === null) {
+        cursor.inventory[key] = MEMPALACE_INVENTORY_SCOPE_EOF;
+      }
+    }
     const byId = new Map(inventory.map((row) => [row.drawer_id, row]));
     const seenThisRun = new Set<string>();
     let scanned = 0;
@@ -337,7 +350,11 @@ export class MemPalaceService {
 
     for (const scope of scopes) {
       const scopeKey = `${scope.wing}::${scope.room}`;
-      let cursorValue = cursor.inventory[scopeKey] ?? null;
+      const storedCursor = cursor.inventory[scopeKey];
+      if (storedCursor === MEMPALACE_INVENTORY_SCOPE_EOF) {
+        continue;
+      }
+      let cursorValue: string | null = storedCursor ?? null;
 
       while (scanned < this.config.connectors.mempalace.maxInventoryDrawersPerRun) {
         const page = await this.client.listDrawers({
@@ -378,10 +395,76 @@ export class MemPalaceService {
           byId.set(row.drawer_id, row);
         }
 
-        cursorValue = page.nextCursor;
-        cursor.inventory[scopeKey] = cursorValue;
-        if (!cursorValue || page.drawers.length === 0) {
+        const next = page.nextCursor;
+        if (page.drawers.length === 0 || !next) {
+          cursor.inventory[scopeKey] = MEMPALACE_INVENTORY_SCOPE_EOF;
           break;
+        }
+        cursorValue = next;
+        cursor.inventory[scopeKey] = cursorValue;
+      }
+    }
+
+    const unscopedKey = "::__mempalace_unscoped__";
+    if (taxonomySummary.wings.length > 0) {
+      const inventoriedCount = [...byId.values()].filter(
+        (row) => row.inventory_status === "inventoried"
+      ).length;
+      if (
+        inventoriedCount < audit.total_drawers &&
+        scanned < this.config.connectors.mempalace.maxInventoryDrawersPerRun
+      ) {
+        const storedUnscoped = cursor.inventory[unscopedKey];
+        if (storedUnscoped !== MEMPALACE_INVENTORY_SCOPE_EOF) {
+          let cursorValue: string | null = storedUnscoped ?? null;
+          while (scanned < this.config.connectors.mempalace.maxInventoryDrawersPerRun) {
+            const page = await this.client.listDrawers({
+              cursor: cursorValue,
+              limit: this.config.connectors.mempalace.pageSize
+            });
+            scanned += page.drawers.length;
+
+            for (const drawer of page.drawers) {
+              seenThisRun.add(drawer.drawer_id);
+              const existing = byId.get(drawer.drawer_id);
+              const row: MemPalaceInventoryRow = {
+                drawer_id: drawer.drawer_id,
+                wing: drawer.wing,
+                room: drawer.room,
+                source_file: drawer.source_file,
+                drawer_hash: drawer.drawer_hash,
+                first_seen_audit_revision:
+                  existing?.first_seen_audit_revision ?? audit.revision,
+                last_seen_audit_revision: audit.revision,
+                inventory_status: "inventoried",
+                semantic_status: shouldIgnoreRow(this.config, {
+                  wing: drawer.wing,
+                  room: drawer.room
+                })
+                  ? "ignored"
+                  : existing && existing.last_ingested_hash && existing.last_ingested_hash === drawer.drawer_hash
+                    ? existing.semantic_status
+                    : existing && existing.last_ingested_hash && existing.last_ingested_hash !== drawer.drawer_hash
+                      ? "stale"
+                      : existing?.semantic_status ?? "pending",
+                last_ingested_hash: existing?.last_ingested_hash ?? null,
+                last_ingested_at: existing?.last_ingested_at ?? null,
+                last_error: null
+              };
+              byId.set(row.drawer_id, row);
+            }
+
+            const next = page.nextCursor;
+            const invAfter = [...byId.values()].filter(
+              (row) => row.inventory_status === "inventoried"
+            ).length;
+            if (page.drawers.length === 0 || !next || invAfter >= audit.total_drawers) {
+              cursor.inventory[unscopedKey] = MEMPALACE_INVENTORY_SCOPE_EOF;
+              break;
+            }
+            cursorValue = next;
+            cursor.inventory[unscopedKey] = cursorValue;
+          }
         }
       }
     }

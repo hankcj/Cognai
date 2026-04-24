@@ -60,9 +60,14 @@ export interface MemPalaceCoverageSummary {
   coverage_status: "full" | "partial" | "unknown";
 }
 
+/** Stored in `inventory` when a wing/room scope is fully listed (skip on next runs). */
+export const MEMPALACE_INVENTORY_SCOPE_EOF = "__eof__";
+
 export interface MemPalaceCursorState {
   inventory: Record<string, string | null>;
   backfill_after_drawer_id: string | null;
+  /** When this differs from the latest audit revision, inventory cursors are reset. */
+  inventoryAuditRevision?: string | null;
 }
 
 export interface MemPalaceDrawerReference {

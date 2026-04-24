@@ -22,6 +22,19 @@ const REQUIRED_TOOLS = [
   "mempalace_search"
 ] as const;
 
+/** MemPalace MCP caps `limit` at 100 for list_drawers. */
+const MEMPALACE_LIST_MAX = 100;
+
+function parseOffsetCursor(cursor: string | null | undefined): number {
+  if (cursor == null || cursor === "") {
+    return 0;
+  }
+  if (/^\d+$/.test(cursor)) {
+    return Number.parseInt(cursor, 10);
+  }
+  return 0;
+}
+
 function tryParseJson(value: string): unknown {
   try {
     return JSON.parse(value) as unknown;
@@ -275,12 +288,34 @@ export class MemPalaceMcpClient {
     cursor?: string | null;
     limit?: number;
   } = {}): Promise<MemPalaceListDrawersResult> {
-    const payload = await this.callJsonTool("mempalace_list_drawers", {
-      ...input,
-      page_size: input.limit,
-      palace: this.config.connectors.mempalace.palacePath
-    });
-    return normalizeDrawerList(payload);
+    const requestedLimit = input.limit ?? this.config.connectors.mempalace.pageSize;
+    const limit = Math.min(Math.max(1, requestedLimit), MEMPALACE_LIST_MAX);
+    const offset = parseOffsetCursor(input.cursor ?? null);
+
+    const args: Record<string, unknown> = {
+      limit,
+      offset
+    };
+    if (input.wing) {
+      args.wing = input.wing;
+    }
+    if (input.room) {
+      args.room = input.room;
+    }
+    const palacePath = this.config.connectors.mempalace.palacePath;
+    if (palacePath) {
+      args.palace = palacePath;
+    }
+
+    const payload = await this.callJsonTool("mempalace_list_drawers", args);
+    const parsed = normalizeDrawerList(payload);
+    const nextCursor =
+      parsed.nextCursor ??
+      (parsed.drawers.length > 0 && parsed.drawers.length === limit
+        ? String(offset + limit)
+        : null);
+
+    return { drawers: parsed.drawers, nextCursor };
   }
 
   async getDrawer(drawerId: string): Promise<MemPalaceDrawerRecord> {
