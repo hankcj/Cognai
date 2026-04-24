@@ -1,0 +1,51 @@
+{
+  "name": "cognai",
+  "version": "0.1.0",
+  "description": "A local-first MCP server for modeling cognitive architecture.",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "cognai": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "dev": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "keywords": [
+    "ai",
+    "mcp",
+    "memory",
+    "graph",
+    "cognitive-architecture"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hankcj/Cognai.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hankcj/Cognai/issues"
+  },
+  "homepage": "https://github.com/hankcj/Cognai#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "commander": "^14.0.3",
+    "kuzu": "^0.11.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  }
+}
