@@ -40,7 +40,9 @@ function arrayifyStrings(value: unknown): string[] {
 }
 
 function normalizeWings(taxonomy: Record<string, unknown>): NormalizedWing[] {
-  const wingsValue = taxonomy.wings;
+  const wingsValue =
+    taxonomy.wings ??
+    (taxonomy.taxonomy && typeof taxonomy.taxonomy === "object" ? taxonomy.taxonomy : undefined);
   const wingEntries: Array<Record<string, unknown>> = [];
 
   if (Array.isArray(wingsValue)) {
@@ -58,6 +60,7 @@ function normalizeWings(taxonomy: Record<string, unknown>): NormalizedWing[] {
           : {};
       wingEntries.push({
         ...value,
+        rooms: value.rooms ?? value,
         name
       });
     }
@@ -98,12 +101,19 @@ function normalizeWings(taxonomy: Record<string, unknown>): NormalizedWing[] {
             : 0;
       return sum + explicit;
     }, 0);
+    const roomCountFromMap =
+      roomsValue && typeof roomsValue === "object" && !Array.isArray(roomsValue)
+        ? Object.values(roomsValue as Record<string, unknown>).reduce(
+            (sum: number, count) => sum + (typeof count === "number" ? count : 0),
+            0
+          )
+        : 0;
     const drawerCount =
       typeof wing.drawer_count === "number"
         ? wing.drawer_count
         : typeof wing.drawers_count === "number"
           ? wing.drawers_count
-          : roomCountFromObjects;
+          : roomCountFromObjects || roomCountFromMap;
 
     return {
       name: String(wing.name ?? "unknown"),
