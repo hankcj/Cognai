@@ -8,13 +8,14 @@ import { RetrievalEngine } from "../core/retrieval/engine.js";
 import { CognaiJsonImportAdapter } from "../importers/adapters/cognai-json.js";
 import { Mem0ImportAdapter } from "../importers/adapters/mem0.js";
 import { MemPalaceImportAdapter } from "../importers/adapters/mempalace.js";
+import { ObsidianImportAdapter } from "../importers/adapters/obsidian.js";
 import { createConnectors } from "../connectors/factory.js";
 
 export function createRuntime(config: CognaiConfig) {
   const storage = createStorageAdapter(config);
   const embeddingProvider = createEmbeddingProvider(config.embeddings);
-  const enrichmentProvider = createEnrichmentProvider(config.enrichment);
-  const inferenceEngine = new InferenceEngine(embeddingProvider, enrichmentProvider);
+  const auxReasoningProvider = createEnrichmentProvider(config.aux_reasoning);
+  const inferenceEngine = new InferenceEngine(embeddingProvider, auxReasoningProvider);
   const revisionEngine = new RevisionEngine();
   const retrievalEngine = new RetrievalEngine(
     storage,
@@ -22,12 +23,17 @@ export function createRuntime(config: CognaiConfig) {
     config.retrieval.topK,
     config.retrieval.confidenceFloor,
     config.retrieval.telosAnchorLimit,
-    config.retrieval.edgeTraversalHops
+    config.retrieval.edgeTraversalHops,
+    config.retrieval.maxReturnedNodes,
+    config.retrieval.maxReturnedEdges,
+    config.retrieval.maxContextTokens,
+    config
   );
   const importAdapters = [
     new CognaiJsonImportAdapter(),
     new Mem0ImportAdapter(),
-    new MemPalaceImportAdapter()
+    new MemPalaceImportAdapter(),
+    new ObsidianImportAdapter()
   ];
   const connectors = createConnectors(config);
 
@@ -35,7 +41,7 @@ export function createRuntime(config: CognaiConfig) {
     config,
     storage,
     embeddingProvider,
-    enrichmentProvider,
+    auxReasoningProvider,
     inferenceEngine,
     revisionEngine,
     retrievalEngine,

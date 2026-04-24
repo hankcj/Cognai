@@ -193,18 +193,22 @@ test("retrieval surfaces anchors and traversed tensions", async () => {
     8,
     0.6,
     3,
-    2
+    2,
+    10,
+    12,
+    700
   );
   const result = await retrieval.query("How should I decide what to build?");
 
-  assert.ok(result.subgraph.telos_anchors.length >= 1);
+  assert.ok(result.cognitive_context.anchors.length >= 1);
   assert.ok(
-    result.subgraph.active_tensions.some(
+    result.cognitive_context.tensions.some(
       (edge) => edge.type === "CONTRADICTS" || edge.type === "INHIBITS"
     )
   );
   assert.equal(result.transparency.classification, "decision");
   assert.ok(result.transparency.selected_nodes.length >= 1);
+  assert.ok(result.memory_lookup_plan.questions.length >= 1);
 });
 
 test("revision reinforces existing nodes and counts contradiction candidates", async () => {
@@ -271,5 +275,5 @@ test("revision reinforces existing nodes and counts contradiction candidates", a
 
   assert.equal(summary.nodesReinforced, 1);
   assert.ok(summary.contradictionCandidates >= 1);
-  assert.equal(summary.enrichmentApplied, false);
+  assert.equal(summary.auxReasoningApplied, false);
 });

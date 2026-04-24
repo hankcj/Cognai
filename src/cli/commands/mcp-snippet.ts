@@ -9,15 +9,30 @@ export async function runMcpSnippetCommand(
   options: McpSnippetCommandOptions = {}
 ): Promise<void> {
   const config = await requireConfig(options.config);
-  const command = "node";
-  const args = ["dist/cli.js", "serve", "--config", config.paths.config];
+  const repoLocalCommand = "node";
+  const repoLocalArgs = ["dist/cli.js", "serve", "--config", config.paths.config];
+  const installedCommand = "cognai";
+  const installedArgs = ["serve", "--config", config.paths.config];
 
   printSection(
-    "Generic MCP Stdio Snippet",
+    "Installed Package Example",
     JSON.stringify(
       {
-        command,
-        args,
+        command: installedCommand,
+        args: installedArgs,
+        env: {}
+      },
+      null,
+      2
+    )
+  );
+
+  printSection(
+    "Repo-Local MCP Stdio Snippet",
+    JSON.stringify(
+      {
+        command: repoLocalCommand,
+        args: repoLocalArgs,
         env: {}
       },
       null,
@@ -31,13 +46,39 @@ export async function runMcpSnippetCommand(
       {
         mcpServers: {
           cognai: {
-            command,
-            args
+            command: installedCommand,
+            args: installedArgs
           }
         }
       },
       null,
       2
     )
+  );
+
+  printSection(
+    "OpenClaw + MemPalace Sibling Example",
+    JSON.stringify(
+      {
+        mcpServers: {
+          cognai: {
+            command: installedCommand,
+            args: installedArgs
+          },
+          mempalace: {
+            command: "mempalace",
+            args: ["mcp", "--palace", config.connectors.mempalace.palacePath]
+          }
+        }
+      },
+      null,
+      2
+    )
+  );
+
+  printSection(
+    "Obsidian Note",
+    `Obsidian support is a local vault connector, not a sibling MCP server. Enable it during init or in config, then run:
+cognai sync --connector obsidian --config ${config.paths.config}`
   );
 }

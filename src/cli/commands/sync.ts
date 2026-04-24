@@ -5,9 +5,9 @@ import type { CognaiState } from "../../config/schema.js";
 import { getConnectorByName } from "../../connectors/factory.js";
 import type { ConnectorName } from "../../connectors/types.js";
 import type { CanonicalConversationEnvelope } from "../../importers/canonical.js";
+import { MemPalaceService } from "../../mempalace/service.js";
 import { createRuntime } from "../../mcp/context.js";
 import { CognaiError } from "../../shared/errors.js";
-import { createId } from "../../shared/ids.js";
 import { printSection } from "../output.js";
 
 export interface SyncCommandOptions {
@@ -130,7 +130,35 @@ export async function runSyncCommand(
     let rangeSummary = "local transcript import";
     let state = await loadState(config);
 
-    if (options.connector) {
+    if (options.connector === "mempalace") {
+      const mempalaceService = new MemPalaceService(config, runtime.storage);
+      const result = await mempalaceService.syncDelta();
+      adapterSource = "mempalace";
+      rangeSummary = result.rangeSummary;
+      envelope = materializeMemoryEntries(result.envelope);
+
+      if (envelope.messages.length === 0 && envelope.memory_entries.length === 0) {
+        state = updateConnectorState(state, "mempalace", {
+          lastSyncAt: new Date().toISOString(),
+          lastRunStatus: result.deletedDrawerIds.length > 0 ? "warning" : "ok",
+          lastError: null,
+          lastAuditAt: result.coverage.last_audit_at,
+          lastInventoryAt: result.coverage.last_inventory_at,
+          lastBackfillAt: result.coverage.last_backfill_at
+        });
+        await saveState(config, state);
+        printSection(
+          "Sync Complete",
+          `Connector: mempalace
+Source range: ${rangeSummary}
+Coverage: ${result.coverage.coverage_status}
+Deleted drawers flagged: ${result.deletedDrawerIds.length}
+Warnings: ${result.warnings.join("; ") || "none"}
+No pending MemPalace drawers required semantic backfill.`
+        );
+        return;
+      }
+    } else if (options.connector) {
       const connector = getConnectorByName(runtime.connectors, options.connector);
       if (!connector) {
         throw new CognaiError(`Unknown connector "${options.connector}".`);
@@ -195,7 +223,23 @@ No new source items were found after dedupe.`
     const inference = await runtime.inferenceEngine.analyzeConversation(envelope);
     const revision = await runtime.revisionEngine.apply(runtime.storage, inference);
 
-    if (options.connector) {
+    if (options.connector === "mempalace") {
+      const coverage = await new MemPalaceService(config, runtime.storage).coverage();
+      const mergedSeenIds = [...state.connectors.mempalace.seenSourceIds, ...collectSourceIds(envelope)].slice(
+        -5000
+      );
+      state = updateConnectorState(state, "mempalace", {
+        lastSyncAt: new Date().toISOString(),
+        lastRunStatus:
+          coverage.coverage_status === "full" ? "ok" : "warning",
+        lastError: null,
+        lastAuditAt: coverage.last_audit_at,
+        lastInventoryAt: coverage.last_inventory_at,
+        lastBackfillAt: coverage.last_backfill_at,
+        seenSourceIds: [...new Set(mergedSeenIds)]
+      });
+      await saveState(config, state);
+    } else if (options.connector) {
       const connectorState = state.connectors[options.connector];
       const mergedSeenIds = [
         ...connectorState.seenSourceIds,
@@ -221,7 +265,9 @@ Edges written: ${revision.edgesWritten}
 Contradictions created: ${revision.contradictionCandidates}
 Fears detected: ${revision.fearsDetected}
 Assumptions detected: ${revision.assumptionsDetected}
-Enrichment applied: ${revision.enrichmentApplied ? "yes" : "no"}`
+Tensions changed: ${revision.tensionsChanged}
+Aux reasoning applied: ${revision.auxReasoningApplied ? "yes" : "no"}
+Warnings: ${revision.warnings.join("; ") || "none"}`
     );
   } catch (error) {
     if (options.connector) {

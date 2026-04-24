@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { StorageAdapter } from "../../storage/types.js";
-import { overlapScore } from "../../shared/text.js";
+import { overlapScore, tokenize } from "../../shared/text.js";
 import type { InferenceResult } from "../inference/types.js";
 
 export interface RevisionSummary {
@@ -12,7 +12,78 @@ export interface RevisionSummary {
   contradictionCandidates: number;
   fearsDetected: number;
   assumptionsDetected: number;
-  enrichmentApplied: boolean;
+  tensionsChanged: number;
+  auxReasoningApplied: boolean;
+  warnings: string[];
+}
+
+const TOPICAL_STOPWORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "avoid",
+  "be",
+  "but",
+  "can",
+  "clearly",
+  "do",
+  "does",
+  "for",
+  "good",
+  "bad",
+  "better",
+  "worse",
+  "from",
+  "had",
+  "has",
+  "have",
+  "healthy",
+  "unhealthy",
+  "helps",
+  "help",
+  "i",
+  "if",
+  "in",
+  "is",
+  "it",
+  "long",
+  "me",
+  "my",
+  "not",
+  "of",
+  "on",
+  "or",
+  "should",
+  "term",
+  "that",
+  "the",
+  "think",
+  "this",
+  "to",
+  "will",
+  "with",
+  "works"
+]);
+
+function topicalOverlap(a: string, b: string): number {
+  const left = new Set(tokenize(a).filter((token) => !TOPICAL_STOPWORDS.has(token)));
+  const right = new Set(tokenize(b).filter((token) => !TOPICAL_STOPWORDS.has(token)));
+
+  if (left.size === 0 || right.size === 0) {
+    return overlapScore(a, b);
+  }
+
+  let matches = 0;
+  for (const token of left) {
+    if (right.has(token)) {
+      matches += 1;
+    }
+  }
+
+  return matches / Math.max(left.size, right.size);
 }
 
 export class RevisionEngine {
@@ -26,6 +97,8 @@ export class RevisionEngine {
     let contradictionCandidates = 0;
     let fearsDetected = 0;
     let assumptionsDetected = 0;
+    let tensionsChanged = 0;
+    const warnings: string[] = [];
 
     for (const episode of inference.episodes) {
       await storage.writeEpisode(episode);
@@ -37,7 +110,14 @@ export class RevisionEngine {
       const existing = existingNodes.find(
         (node) =>
           node.type === proposal.node.type &&
-          overlapScore(node.label, proposal.node.label) >= 0.82
+          (
+            (
+              typeof node.metadata.canonical_label === "string" &&
+              typeof proposal.node.metadata.canonical_label === "string" &&
+              node.metadata.canonical_label === proposal.node.metadata.canonical_label
+            ) ||
+            overlapScore(node.label, proposal.node.label) >= 0.82
+          )
       );
 
       let effectiveNodeId = proposal.node.id;
@@ -61,6 +141,18 @@ export class RevisionEngine {
           updated_at: new Date().toISOString(),
           metadata: {
             ...existing.metadata,
+            evidence_message_ids: [
+              ...new Set([
+                ...((existing.metadata.evidence_message_ids as string[] | undefined) ?? []),
+                ...((proposal.node.metadata.evidence_message_ids as string[] | undefined) ?? [])
+              ])
+            ],
+            evidence_fragments: [
+              ...new Set([
+                ...((existing.metadata.evidence_fragments as string[] | undefined) ?? []),
+                ...((proposal.node.metadata.evidence_fragments as string[] | undefined) ?? [])
+              ])
+            ],
             reinforced_by: inference.envelope.conversation.id,
             contradiction_candidate: hasPolarityConflict || existing.metadata.contradiction_candidate === true
           }
@@ -91,6 +183,13 @@ export class RevisionEngine {
             edge.to_node_id === proposal.node.id ? effectiveNodeId : edge.to_node_id
         });
         edgesWritten += 1;
+        if (
+          edge.type === "CONTRADICTS" ||
+          edge.type === "CONFLICTS_WITH_BUT_HELD_IN_TENSION" ||
+          edge.type === "INHIBITS"
+        ) {
+          tensionsChanged += 1;
+        }
       }
 
       const contradictionTargets = new Set(proposal.contradictionTargets ?? []);
@@ -109,7 +208,7 @@ export class RevisionEngine {
           proposalPolarity &&
           existingPolarity &&
           proposalPolarity !== existingPolarity &&
-          overlapScore(existingNode.description, proposal.node.description) >= 0.46
+          topicalOverlap(existingNode.description, proposal.node.description) >= 0.4
         ) {
           contradictionTargets.add(existingNode.id);
         }
@@ -134,7 +233,12 @@ export class RevisionEngine {
         });
         contradictionCandidates += 1;
         edgesWritten += 1;
+        tensionsChanged += 1;
       }
+    }
+
+    if (inference.annotations.length > 0) {
+      warnings.push(...inference.annotations);
     }
 
     return {
@@ -145,7 +249,9 @@ export class RevisionEngine {
       contradictionCandidates,
       fearsDetected,
       assumptionsDetected,
-      enrichmentApplied: inference.enrichmentApplied
+      tensionsChanged,
+      auxReasoningApplied: inference.enrichmentApplied,
+      warnings
     };
   }
 }

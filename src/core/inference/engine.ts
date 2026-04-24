@@ -18,10 +18,13 @@ interface ExtractedCandidate {
   type: NodeType;
   label: string;
   description: string;
+  canonicalLabel: string;
   construal_level: CognaiNode["construal_level"];
   confidence: number;
   metadata: Record<string, unknown>;
 }
+
+const CLASSIFIER_VERSION = "deterministic-v2";
 
 const CANDIDATE_DEFINITIONS: CandidateDefinition[] = [
   {
@@ -33,7 +36,7 @@ const CANDIDATE_DEFINITIONS: CandidateDefinition[] = [
       /it'?s important to me to ([^.?!]+)/i
     ],
     construal: "high",
-    confidence: 0.82,
+    confidence: 0.84,
     rationale: "Matched explicit value language."
   },
   {
@@ -45,7 +48,7 @@ const CANDIDATE_DEFINITIONS: CandidateDefinition[] = [
       /i need to ([^.?!]+)/i
     ],
     construal: "mid",
-    confidence: 0.74,
+    confidence: 0.76,
     rationale: "Matched explicit goal language."
   },
   {
@@ -56,7 +59,7 @@ const CANDIDATE_DEFINITIONS: CandidateDefinition[] = [
       /i have committed to ([^.?!]+)/i
     ],
     construal: "mid",
-    confidence: 0.78,
+    confidence: 0.8,
     rationale: "Matched explicit commitment language."
   },
   {
@@ -67,7 +70,7 @@ const CANDIDATE_DEFINITIONS: CandidateDefinition[] = [
       /i tend to choose ([^.?!]+)/i
     ],
     construal: "low",
-    confidence: 0.68,
+    confidence: 0.7,
     rationale: "Matched explicit preference language."
   },
   {
@@ -75,11 +78,11 @@ const CANDIDATE_DEFINITIONS: CandidateDefinition[] = [
     patterns: [
       /i am the kind of person who ([^.?!]+)/i,
       /i am someone who ([^.?!]+)/i,
-      /i am ([^.?!]+)/i
+      /i see myself as ([^.?!]+)/i
     ],
     construal: "high",
-    confidence: 0.72,
-    rationale: "Matched identity framing."
+    confidence: 0.74,
+    rationale: "Matched explicit identity framing."
   },
   {
     type: "Belief",
@@ -89,7 +92,7 @@ const CANDIDATE_DEFINITIONS: CandidateDefinition[] = [
       /i know ([^.?!]+)/i
     ],
     construal: "mid",
-    confidence: 0.64,
+    confidence: 0.66,
     rationale: "Matched explicit belief language."
   },
   {
@@ -101,7 +104,7 @@ const CANDIDATE_DEFINITIONS: CandidateDefinition[] = [
       /i worry (?:that )?([^.?!]+)/i
     ],
     construal: "mid",
-    confidence: 0.66,
+    confidence: 0.68,
     rationale: "Matched protective or risk-oriented language."
   },
   {
@@ -118,6 +121,13 @@ const CANDIDATE_DEFINITIONS: CandidateDefinition[] = [
   }
 ];
 
+function segmentMessage(content: string): string[] {
+  return content
+    .split(/(?<=[.?!])\s+|\n+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
 function inferPolarity(content: string): "positive" | "negative" {
   return /\b(not|never|don't|cant|can't|won't|no longer|avoid|afraid|worried|fear)\b/i.test(
     content
@@ -126,39 +136,76 @@ function inferPolarity(content: string): "positive" | "negative" {
     : "positive";
 }
 
+function canonicalize(fragment: string): string {
+  return fragment
+    .toLowerCase()
+    .replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function createCandidate(
-  content: string,
-  definition: CandidateDefinition
+  sentence: string,
+  definition: CandidateDefinition,
+  messageId: string
 ): ExtractedCandidate[] {
   const matches: ExtractedCandidate[] = [];
 
   for (const pattern of definition.patterns) {
-    const match = content.match(pattern);
+    const match = sentence.match(pattern);
     if (!match?.[1]) {
       continue;
     }
 
     const fragment = match[1].trim();
-    const polarity = inferPolarity(content);
+    const canonicalLabel = canonicalize(fragment);
+    if (!canonicalLabel) {
+      continue;
+    }
+
     matches.push({
       type: definition.type,
       label: truncate(fragment, 64),
       description: fragment,
+      canonicalLabel,
       construal_level: definition.construal,
       confidence: definition.confidence,
       metadata: {
-        polarity,
-        extracted_from: content,
+        polarity: inferPolarity(sentence),
+        extracted_from: sentence,
         extraction_rationale: definition.rationale,
         confidence_explanation:
           definition.type === "Assumption"
             ? "Assumptions stay lower-confidence by default because they are implicit and revisable."
-            : "Confidence reflects explicit language strength in the source message."
+            : "Confidence reflects explicit language strength in the source sentence.",
+        canonical_label: canonicalLabel,
+        evidence_message_ids: [messageId],
+        evidence_fragments: [fragment],
+        classifier_version: CLASSIFIER_VERSION
       }
     });
   }
 
   return matches;
+}
+
+function applyPrecedenceRules(candidates: ExtractedCandidate[]): ExtractedCandidate[] {
+  const types = new Set(candidates.map((candidate) => candidate.type));
+
+  return candidates.filter((candidate) => {
+    if (
+      candidate.type === "Identity Claim" &&
+      (types.has("Fear") ||
+        types.has("Goal") ||
+        types.has("Commitment") ||
+        types.has("Assumption") ||
+        types.has("Belief"))
+    ) {
+      return false;
+    }
+
+    return true;
+  });
 }
 
 export class InferenceEngine {
@@ -183,12 +230,13 @@ export class InferenceEngine {
         source_message_id:
           typeof message.metadata.source_id === "string"
             ? message.metadata.source_id
-            : message.id
+            : message.id,
+        ...message.metadata
       }
     }));
+
     const proposals: InferenceProposal[] = [];
     const seenKeys = new Set<string>();
-    const messageNodeMap = new Map<string, string[]>();
 
     for (const message of envelope.messages) {
       if (message.role !== "user" || message.content.trim().length === 0) {
@@ -201,69 +249,72 @@ export class InferenceEngine {
         continue;
       }
 
-      const candidates = CANDIDATE_DEFINITIONS.flatMap((definition) =>
-        createCandidate(message.content, definition)
-      );
+      for (const sentence of segmentMessage(message.content)) {
+        const rawCandidates = CANDIDATE_DEFINITIONS.flatMap((definition) =>
+          createCandidate(sentence, definition, message.id)
+        );
+        const candidates = applyPrecedenceRules(rawCandidates);
 
-      for (const candidate of candidates) {
-        const candidateKey = `${candidate.type}:${tokenize(candidate.label).join(" ")}`;
-        if (!candidate.label || seenKeys.has(candidateKey)) {
-          continue;
-        }
-        seenKeys.add(candidateKey);
-
-        const now = new Date().toISOString();
-        const node: CognaiNode = {
-          id: createId(),
-          type: candidate.type,
-          label: candidate.label,
-          description: candidate.description,
-          embedding: await this.embeddingProvider.embedText(candidate.description),
-          source: "inferred",
-          confidence: candidate.confidence,
-          activation: candidate.type === "Fear" ? 0.62 : 0.55,
-          centrality:
-            candidate.type === "Value"
-              ? 0.8
-              : candidate.type === "Fear"
-                ? 0.52
-                : 0.35,
-          construal_level: candidate.construal_level,
-          created_at: now,
-          updated_at: now,
-          last_reinforced_at: now,
-          metadata: {
-            ...candidate.metadata,
-            conversation_source: envelope.source,
-            originating_source_type: envelope.source
+        for (const candidate of candidates) {
+          const candidateKey = `${candidate.type}:${candidate.canonicalLabel}`;
+          if (seenKeys.has(candidateKey)) {
+            continue;
           }
-        };
+          seenKeys.add(candidateKey);
 
-        targetEpisode.inferred_node_ids.push(node.id);
-        messageNodeMap.set(message.id, [...(messageNodeMap.get(message.id) ?? []), node.id]);
-
-        const edges: CognaiEdge[] = [
-          {
+          const now = new Date().toISOString();
+          const node: CognaiNode = {
             id: createId(),
-            from_node_id: node.id,
-            to_node_id: targetEpisode.id,
-            type: "REVEALED_BY",
-            confidence: node.confidence,
+            type: candidate.type,
+            label: candidate.label,
+            description: candidate.description,
+            embedding: await this.embeddingProvider.embedText(candidate.description),
             source: "inferred",
+            confidence: candidate.confidence,
+            activation: candidate.type === "Fear" ? 0.62 : 0.55,
+            centrality:
+              candidate.type === "Value"
+                ? 0.8
+                : candidate.type === "Fear"
+                  ? 0.52
+                  : 0.35,
+            construal_level: candidate.construal_level,
             created_at: now,
+            updated_at: now,
+            last_reinforced_at: now,
             metadata: {
-              extracted_from_message_id: message.id
+              ...candidate.metadata,
+              conversation_source: envelope.source,
+              originating_source_type: envelope.source
             }
-          }
-        ];
+          };
 
-        proposals.push({
-          origin: "deterministic",
-          reason: `Deterministic extraction from message "${truncate(message.content, 72)}".`,
-          node,
-          edges,
-          contradictionTargets: []
-        });
+          targetEpisode.inferred_node_ids.push(node.id);
+
+          const edges: CognaiEdge[] = [
+            {
+              id: createId(),
+              from_node_id: node.id,
+              to_node_id: targetEpisode.id,
+              type: "REVEALED_BY",
+              confidence: node.confidence,
+              source: "inferred",
+              created_at: now,
+              metadata: {
+                extracted_from_message_id: message.id,
+                evidence_fragments: candidate.metadata.evidence_fragments
+              }
+            }
+          ];
+
+          proposals.push({
+            origin: "deterministic",
+            reason: `Deterministic extraction from sentence "${truncate(sentence, 72)}".`,
+            node,
+            edges,
+            contradictionTargets: []
+          });
+        }
       }
     }
 
@@ -288,7 +339,7 @@ export class InferenceEngine {
         from_node_id: goal.node.id,
         to_node_id: targetValue.node.id,
         type: "IN_SERVICE_OF",
-        confidence: siblingValue ? 0.67 : 0.58,
+        confidence: siblingValue ? 0.69 : 0.58,
         source: "inferred",
         created_at: new Date().toISOString(),
         metadata: {
@@ -298,12 +349,12 @@ export class InferenceEngine {
     }
 
     for (const fear of fears) {
-      const targetGoal = goals.find((goal) =>
-        overlapScore(goal.node.description, fear.node.description) >= 0.18
-      ) ?? goals[0];
-      const targetValue = values.find((value) =>
-        overlapScore(value.node.description, fear.node.description) >= 0.14
-      ) ?? values[0];
+      const targetGoal =
+        goals.find((goal) => overlapScore(goal.node.description, fear.node.description) >= 0.18) ??
+        goals[0];
+      const targetValue =
+        values.find((value) => overlapScore(value.node.description, fear.node.description) >= 0.14) ??
+        values[0];
 
       if (targetGoal) {
         fear.edges.push({
@@ -403,9 +454,11 @@ export class InferenceEngine {
     if (enrichmentApplied) {
       const enriched = await this.enrichmentProvider.enrich(envelope, proposals);
       for (const candidate of enriched) {
-        const dedupeKey = `${candidate.proposal.node.type}:${tokenize(
-          candidate.proposal.node.label
-        ).join(" ")}`;
+        const canonicalLabel =
+          typeof candidate.proposal.node.metadata.canonical_label === "string"
+            ? candidate.proposal.node.metadata.canonical_label
+            : candidate.proposal.node.label.toLowerCase();
+        const dedupeKey = `${candidate.proposal.node.type}:${canonicalLabel}`;
         if (seenKeys.has(dedupeKey)) {
           continue;
         }
@@ -413,6 +466,11 @@ export class InferenceEngine {
         candidate.proposal.node.embedding = await this.embeddingProvider.embedText(
           candidate.proposal.node.description
         );
+        candidate.proposal.node.metadata = {
+          ...candidate.proposal.node.metadata,
+          canonical_label: canonicalLabel,
+          classifier_version: "aux-reasoning-v1"
+        };
         proposals.push(candidate.proposal);
         if (candidate.annotation) {
           annotations.push(candidate.annotation);

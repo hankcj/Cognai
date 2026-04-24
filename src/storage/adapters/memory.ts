@@ -127,6 +127,9 @@ export class MemoryStorageAdapter implements StorageAdapter {
     return {
       telos_anchors: (await this.getTopValueNodes(3)).slice(0, 3),
       relevant_nodes: [...relevant.values()],
+      relevant_edges: [...this.edges.values()].filter(
+        (edge) => relevant.has(edge.from_node_id) && relevant.has(edge.to_node_id)
+      ),
       active_tensions: tensions,
       confidence_floor_met: relevant.size > 0
     };

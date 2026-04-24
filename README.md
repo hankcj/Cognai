@@ -1,87 +1,93 @@
 # Cognai
 
-Cognai is a local-first MCP server that helps AI systems understand what matters to you.
+Cognai is a provider-agnostic reasoning layer that sits between an AI client and the user's memory system.
 
-Instead of pretending to "be you," Cognai builds a cognitive graph of your values, goals, beliefs, identity claims, preferences, fears, assumptions, and tensions. It keeps provenance for what it inferred, stores everything locally, and returns lean decision-oriented context over MCP so your tools can respond in service of your actual priorities.
+It is not trying to replace memory, and it is not trying to be the answer model. Its job is to keep a compact local model of what matters to a person, what they are trying to do, what they believe, what they fear, what assumptions they are relying on, and where their internal tensions live, then hand that reasoning packet back to the AI at the right moment.
 
-## What It Is
+## The Product In One Sentence
 
-Cognai is for people who already use AI heavily and want something more durable than chat history.
+Bring your own memory system, bring your own model provider, and use Cognai as the local "brain layer" in the middle.
 
-It is designed to sit between:
+## What Cognai Does
 
-- your conversations, notes, and memory systems
-- your local AI tooling and MCP-enabled clients
+When an AI client needs context, the intended flow is:
 
-Its job is to turn raw interaction history into a structured model such as:
+1. The user talks to the AI client.
+2. The AI client calls `cognai_query`.
+3. Cognai returns:
+   - `cognitive_context`
+   - `memory_lookup_plan`
+   - `response_guidance`
+4. The AI client calls the user's memory system with that lookup plan.
+5. The AI client answers using whatever model provider the user chose.
+6. The AI client writes new episodic memory to the memory system.
+7. The AI client calls `cognai_update` so Cognai can revise its semantic graph.
 
-- what you say you value
-- what goals are downstream of those values
-- what beliefs or assumptions your plans depend on
-- what fears are inhibiting execution
-- where your graph contains contradiction or productive tension
+That means:
 
-## Why Use It
+- the memory system stays responsible for facts and recall
+- the model provider stays responsible for generation
+- Cognai stays responsible for reasoning, interpretation, and long-lived semantic structure
 
-Most AI systems are stateless, shallowly personalized, or overly dependent on brittle prompt context. Cognai gives them a more stable layer to work with.
+## What Cognai Is Not
 
-With Cognai, the goal is not "remember everything."
+Cognai is not:
 
-The goal is:
+- a general memory database
+- a replacement for MemPalace, Mem0, or similar tools
+- a hosted AI provider
+- a frontend application
 
-- preserve the semantic structure of what matters
-- make that structure inspectable and explainable
-- keep it local and MCP-friendly
-- complement episodic memory tools instead of replacing them
+## Why Someone Would Use It
 
-## Current Product Shape
+Most AI systems either forget too much, remember in a shallow way, or drag huge amounts of raw context into every answer.
 
-Cognai is currently a **developer beta**.
+Cognai aims to give them something smaller and smarter:
 
-Today it supports:
+- a local graph of values, goals, beliefs, commitments, identity claims, fears, assumptions, and tensions
+- provenance back to the conversations that revealed those structures
+- a decision-oriented packet the AI can use before it asks memory for raw evidence
 
-- local setup through a CLI onboarding flow
-- embedded local persistence with SurrealDB by default
-- deterministic transcript-to-graph inference
-- provenance episodes and inspectable graph state
-- decision-oriented retrieval over MCP
-- optional connector setup for Mem0 and MemPalace
-- optional embeddings and optional enrichment configuration
+In plain terms: memory tells the AI what happened, and Cognai helps the AI understand why it matters.
 
-Right now it is strongest as:
+## Current Beta Capabilities
 
-- a local testing environment for cognitive modeling
-- an MCP companion for AI workflows
-- a semantic layer on top of existing memory systems
+Today Cognai can:
 
-## Core Workflow
+- initialize a local workspace
+- store graph state locally with embedded SurrealDB by default
+- ingest transcripts and normalized memory exports
+- infer values, goals, beliefs, preferences, commitments, identity claims, fears, and assumptions
+- preserve provenance episodes
+- expose a structured MCP server with `cognai_query`, `cognai_update`, `cognai_explain`, and `cognai_flag`
+- generate memory lookup plans for the AI client
+- support MemPalace as the first hardened reference memory-system integration
+- audit, inventory, and semantically backfill MemPalace drawers without scraping backend storage
+- ingest Obsidian vault notes directly from local Markdown files
+- use optional auxiliary reasoning with `openai`, `anthropic`, `google`, or `openai-compatible` providers
 
-The current product loop is:
+Embeddings are optional. When enabled, Cognai uses OpenAI embedding models, optionally through an OpenAI-compatible base URL.
 
-1. initialize a local Cognai workspace
-2. ingest a transcript, export, or connector pull
-3. inspect the resulting graph and tensions
-4. attach Cognai as an MCP server
-5. query it from an AI client
+## Current Product Status
 
-## Features
+This is a real developer beta.
 
-- **Local-first by default**: graph state, provenance, and sync checkpoints live on your machine.
-- **MCP-native**: Cognai runs as a stdio MCP server and exposes purpose-built tools.
-- **Cognitive graph model**: stores values, goals, beliefs, identity claims, fears, assumptions, and more.
-- **Explainable inference**: links inferred nodes back to stored episodes through provenance edges.
-- **Decision-oriented retrieval**: prioritizes telos anchors, tensions, and relevant graph structure instead of dumping raw memory.
-- **Adapter-based ingestion**: works with canonical Cognai JSON and can normalize external memory shapes.
-- **Connector support**: includes read-only connector paths for Mem0 and MemPalace.
+The core loop works:
 
-## Who It Is For
+- local setup
+- local storage
+- transcript ingestion
+- graph inspection
+- MCP attachment
+- structured reasoning output
 
-Cognai is currently best suited for:
+What is still early:
 
-- builders who want AI systems to reason from their priorities
-- people already using memory tools and wanting a semantic layer above them
-- MCP users who want a local, inspectable context engine
-- researchers or developers exploring personal cognitive architecture modeling
+- very large MemPalace performance tuning beyond the current resumable audit/inventory/backfill model
+- very large Obsidian vault tuning beyond bounded Markdown-file sync
+- retrieval tuning under messy data
+- packaging polish across many environments
+- broader memory-system coverage beyond the current reference integrations
 
 ## Installation
 
@@ -90,65 +96,79 @@ Cognai is currently best suited for:
 - Node.js 20+
 - npm 10+
 
-### Install Dependencies
+### Local Repo Setup
 
 ```bash
 npm install
+npm run build
 ```
 
-### Run The CLI
+### CLI Help
 
 ```bash
 npm run dev -- --help
 ```
 
-## Quick Start
+## Fastest First Test
 
-### 1. Initialize A Workspace
+The quickest way to test the full local loop is:
+
+```bash
+npm run dev -- demo
+```
+
+That creates a demo workspace, ingests a built-in transcript, and leaves you with a working local graph you can inspect immediately.
+
+Then run:
+
+```bash
+npm run dev -- inspect --config /absolute/path/to/config.json
+npm run dev -- mcp snippet --config /absolute/path/to/config.json
+npm run dev -- serve --config /absolute/path/to/config.json
+```
+
+## Standard Workflow
+
+### 1. Initialize
 
 ```bash
 npm run dev -- init
 ```
 
-The interactive onboarding now walks through:
+Recommended default path:
 
-- mode: user or org
-- storage adapter, with embedded SurrealDB as the default
-- embedding provider setup
-- optional enrichment provider setup
-- optional live connector setup for Mem0 and/or MemPalace
-- optional self-description seeding
+- `surrealdb` storage
+- no embeddings unless you already want to test them
+- no auxiliary reasoning unless you explicitly want additive model help
+- MemPalace enabled only if you already use it
+- Obsidian enabled only if you already have a vault you want to backfill
 
-### 2. Validate The Workspace
+### 2. Check Readiness
 
 ```bash
 npm run dev -- doctor
 ```
 
-This checks:
-
-- config resolution
-- storage readiness
-- embedding and enrichment configuration status
-- connector configuration status
-- sync checkpoint state
-
 ### 3. Ingest Data
 
-From a local transcript or export:
+Transcript or export:
 
 ```bash
 npm run dev -- sync --transcript /absolute/path/to/input.json
 ```
 
-From a live connector:
+Connector-assisted sync:
 
 ```bash
 npm run dev -- sync --connector mem0
 npm run dev -- sync --connector mempalace
+npm run dev -- sync --connector obsidian
+npm run dev -- mempalace audit
+npm run dev -- mempalace inventory
+npm run dev -- mempalace coverage
 ```
 
-### 4. Inspect What Cognai Learned
+### 4. Inspect The Graph
 
 ```bash
 npm run dev -- inspect
@@ -157,113 +177,107 @@ npm run dev -- inspect --episodes
 npm run dev -- inspect --sync-state
 ```
 
-### 5. Attach It To An MCP Client
-
-Generate a ready-to-paste snippet:
+### 5. Attach To An MCP Client
 
 ```bash
 npm run dev -- mcp snippet
-```
-
-Start the server:
-
-```bash
 npm run dev -- serve
 ```
 
-## CLI Commands
-
-Current commands:
-
-- `cognai init`
-- `cognai doctor`
-- `cognai sync`
-- `cognai inspect`
-- `cognai config show`
-- `cognai mcp snippet`
-- `cognai serve`
-
-Use `npm run dev -- <command> --help` for the full option surface.
-
-## Integrations
-
-Cognai is meant to work with existing memory systems, not replace them.
-
-Current integration modes:
-
-- canonical Cognai JSON import
-- normalized Mem0-shaped import
-- normalized MemPalace-shaped import
-- live read-only connector pulls for Mem0 and MemPalace
-
-The product boundary is intentional:
-
-- external systems remain the source of episodic recall
-- Cognai focuses on semantic modeling and retrieval
-
-See [docs/integrations.md](/Users/hankcj/Cognai/docs/integrations.md) and [docs/import-schema.md](/Users/hankcj/Cognai/docs/import-schema.md).
-
 ## MCP Tools
 
-The current MCP server exposes:
+### `cognai_query`
 
-- `cognai_query`
-- `cognai_update`
-- `cognai_explain`
-- `cognai_flag`
+Returns a reasoning packet for the AI client:
 
-These tools already run against the local runtime, storage, retrieval, and provenance layers.
+- `cognitive_context`
+- `memory_lookup_plan`
+- `response_guidance`
+- `transparency`
+- `warnings`
 
-## Storage
+### `cognai_update`
 
-Default storage is **SurrealDB embedded**.
+Models a completed interaction:
 
-Other adapters still exist for development purposes:
+- user message
+- assistant response summary
+- memory evidence used
+- memory writes performed
+- optional interaction outcome
 
-- `surrealdb`: primary local runtime
-- `file`: fallback and debugging
-- `memory`: tests and ephemeral runs
+### `cognai_explain`
 
-## Status
+Explains why a node exists, what it connects to, and which episodes support it.
 
-This is a real local beta, not a finished product.
+### `cognai_flag`
 
-What is already strong:
+Lets operators mark nodes without deleting graph history.
 
-- local graph persistence
-- onboarding and operator workflow
-- deterministic inference
-- explainability and inspection
-- MCP attachment
+## Memory Systems And Providers
 
-What is still early:
+Cognai is intentionally bring-your-own-infrastructure.
 
-- real-world connector hardening
-- retrieval quality under noisy data
-- packaging polish
-- broader import coverage
+### Memory Systems
 
-## Development
+The recommended architecture is sibling systems:
 
-Build:
+- your AI client talks to Cognai over MCP
+- your AI client talks to the memory system over MCP or its native tools
+- the AI client orchestrates both
 
-```bash
-npm run build
-```
+MemPalace is the first reference integration because it matches the product direction closely. Cognai can also ingest canonical Cognai JSON, Mem0-shaped data, MemPalace-shaped data, and Obsidian vault Markdown files.
 
-Run tests:
+### Model Providers
 
-```bash
-npm test
-```
+The user's primary answer-generation model is outside Cognai.
 
-## Docs
+Inside Cognai there are only two optional model-facing surfaces:
+
+- `embeddings`
+  - OpenAI embedding models only
+  - optional OpenAI-compatible base URL
+- `aux_reasoning`
+  - optional
+  - supports `openai`, `anthropic`, `google`, and `openai-compatible`
+  - additive only, never required for the core deterministic path
+
+## MemPalace And OpenClaw
+
+The intended real-world setup is:
+
+- MemPalace for episodic recall
+- Cognai for reasoning and semantic structure
+- OpenClaw or another MCP-aware AI client as the orchestrator
+
+See:
 
 - [docs/onboarding.md](/Users/hankcj/Cognai/docs/onboarding.md)
 - [docs/mcp-setup.md](/Users/hankcj/Cognai/docs/mcp-setup.md)
+- [docs/integrations.md](/Users/hankcj/Cognai/docs/integrations.md)
 - [docs/config.md](/Users/hankcj/Cognai/docs/config.md)
 - [docs/architecture.md](/Users/hankcj/Cognai/docs/architecture.md)
-- [cognai-prd.md](/Users/hankcj/Cognai/cognai-prd.md)
+
+## Development
+
+```bash
+npm run typecheck
+npm run test
+npm run build
+npm run smoke:pack
+```
+
+Provider-gated smoke tests:
+
+```bash
+npm run smoke:providers
+```
+
+Full local verification:
+
+```bash
+npm run verify
+```
 
 ## License
 

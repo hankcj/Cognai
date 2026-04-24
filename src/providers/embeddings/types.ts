@@ -9,4 +9,6 @@ export interface EmbeddingProviderConfig {
   provider: "none" | "openai";
   model: string;
   apiKeyEnvVar: string;
+  baseUrl: string;
+  timeoutMs: number;
 }

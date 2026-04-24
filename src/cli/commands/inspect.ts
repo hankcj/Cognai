@@ -1,4 +1,5 @@
 import { loadState, requireConfig } from "../../config/loader.js";
+import { loadMemPalaceAudit, loadMemPalaceCoverage } from "../../mempalace/state.js";
 import { createRuntime } from "../../mcp/context.js";
 import { printJson, printSection } from "../output.js";
 
@@ -15,6 +16,8 @@ export async function runInspectCommand(
 ): Promise<void> {
   const config = await requireConfig(options.config);
   const state = await loadState(config);
+  const mempalaceAudit = await loadMemPalaceAudit(config);
+  const mempalaceCoverage = await loadMemPalaceCoverage(config);
   const runtime = createRuntime(config);
   await runtime.storage.init();
 
@@ -53,7 +56,11 @@ export async function runInspectCommand(
     if (options.syncState) {
       printJson({
         connectors: state.connectors,
-        configured: config.connectors
+        configured: config.connectors,
+        mempalace: {
+          audit: mempalaceAudit,
+          coverage: mempalaceCoverage
+        }
       });
       return;
     }
@@ -74,9 +81,13 @@ Top telos anchors: ${anchors.map((node) => node.label).join(", ") || "none"}`
       `Mem0: ${state.connectors.mem0.lastRunStatus} | last sync ${
         state.connectors.mem0.lastSyncAt ?? "never"
       } | seen source ids ${state.connectors.mem0.seenSourceIds.length}
+Obsidian: ${state.connectors.obsidian.lastRunStatus} | last sync ${
+        state.connectors.obsidian.lastSyncAt ?? "never"
+      } | seen note versions ${state.connectors.obsidian.seenSourceIds.length}
 MemPalace: ${state.connectors.mempalace.lastRunStatus} | last sync ${
         state.connectors.mempalace.lastSyncAt ?? "never"
-      } | seen source ids ${state.connectors.mempalace.seenSourceIds.length}`
+      } | seen source ids ${state.connectors.mempalace.seenSourceIds.length} | coverage ${mempalaceCoverage.coverage_status} (${mempalaceCoverage.semantically_synced_drawers}/${mempalaceCoverage.total_drawers} semantically synced)
+Latest audit: ${mempalaceAudit.latest?.captured_at ?? "never"} | drawers ${mempalaceAudit.latest?.total_drawers ?? 0}`
     );
   } finally {
     await runtime.storage.close();

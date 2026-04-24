@@ -18,19 +18,26 @@ export function createDefaultConfig(cwd: string = process.cwd()): CognaiConfig {
     embeddings: {
       provider: "none",
       model: "text-embedding-3-small",
-      apiKeyEnvVar: "OPENAI_API_KEY"
+      apiKeyEnvVar: "OPENAI_API_KEY",
+      baseUrl: "https://api.openai.com/v1",
+      timeoutMs: 15000
     },
-    enrichment: {
+    aux_reasoning: {
       enabled: false,
       provider: "none",
       model: "gpt-4.1-mini",
-      apiKeyEnvVar: "OPENAI_API_KEY"
+      apiKeyEnvVar: "OPENAI_API_KEY",
+      baseUrl: "https://api.openai.com/v1",
+      timeoutMs: 20000
     },
     retrieval: {
       topK: 8,
       confidenceFloor: 0.6,
       telosAnchorLimit: 3,
-      edgeTraversalHops: 2
+      edgeTraversalHops: 2,
+      maxReturnedNodes: 10,
+      maxReturnedEdges: 12,
+      maxContextTokens: 700
     },
     inference: {
       passiveSyncEnabled: true,
@@ -63,11 +70,35 @@ export function createDefaultConfig(cwd: string = process.cwd()): CognaiConfig {
         pollIntervalMinutes: 30,
         autoSync: false
       },
+      obsidian: {
+        enabled: false,
+        vaultPath: resolve(cwd, "Obsidian"),
+        includeDirs: [],
+        excludeDirs: [".obsidian", ".trash", ".git", "node_modules"],
+        maxFilesPerSync: 1000,
+        pollIntervalMinutes: 60,
+        autoSync: false
+      },
       mempalace: {
         enabled: false,
         command: "mempalace",
-        args: ["export", "--format", "json"],
+        args: [],
         workingDirectory: cwd,
+        palacePath: resolve(cwd, ".mempalace"),
+        integrationMode: "sibling_mcp",
+        bootstrapMode: "none",
+        backfillScope: "audit_only",
+        includeWings: [],
+        excludeWings: [],
+        includeRooms: [],
+        excludeRooms: [],
+        pageSize: 200,
+        maxInventoryDrawersPerRun: 5000,
+        maxSemanticDrawersPerRun: 500,
+        bootstrap: {
+          searchLimit: 8,
+          wakeUpTokenBudget: 600
+        },
         pollIntervalMinutes: 60,
         autoSync: false
       }

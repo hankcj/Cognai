@@ -1,0 +1,34 @@
+{
+  "envelope": {
+    "source": "cognai-json",
+    "conversation": {
+      "id": "fixture-decision-clean",
+      "metadata": {}
+    },
+    "messages": [
+      {
+        "id": "1",
+        "role": "user",
+        "content": "I care about independence and craft. I want to build a small profitable software business.",
+        "timestamp": "2026-04-24T12:00:00.000Z",
+        "metadata": {}
+      },
+      {
+        "id": "2",
+        "role": "user",
+        "content": "I prefer calm, sustainable work over chaotic growth. I am worried that burnout will make me quit. I assume customers will pay more for quality than speed.",
+        "timestamp": "2026-04-24T12:05:00.000Z",
+        "metadata": {}
+      }
+    ],
+    "memory_entries": [],
+    "participants": [],
+    "metadata": {}
+  },
+  "expectations": {
+    "required_types": ["Value", "Goal", "Fear", "Assumption", "Preference"],
+    "min_tensions": 1,
+    "query": "What kind of business should I build?",
+    "min_memory_questions": 2
+  }
+}

@@ -4,8 +4,18 @@ export interface InitPromptAnswers {
   mode: "user" | "org";
   storage: "file" | "memory" | "surrealdb";
   embeddingProvider: "none" | "openai";
-  enrichmentProvider: "none" | "openai";
-  connector: "none" | "mem0" | "mempalace" | "both";
+  auxReasoningProvider:
+    | "none"
+    | "openai"
+    | "anthropic"
+    | "google"
+    | "openai-compatible";
+  connector: "none" | "mem0" | "mempalace" | "obsidian" | "all" | "both";
+  mempalacePalacePath: string;
+  mempalaceBackfillScope: "audit_only" | "selected" | "full";
+  mempalaceIncludeWings: string[];
+  mempalaceIncludeRooms: string[];
+  obsidianVaultPath: string;
   seed: string;
   importNow: boolean;
 }
@@ -42,23 +52,77 @@ export async function runInitPrompts(): Promise<InitPromptAnswers> {
     ]
   });
 
-  const enrichmentProvider = await select<"none" | "openai">({
-    message: "Do you want to prepare optional enrichment settings too?",
+  const auxReasoningProvider = await select<
+    "none" | "openai" | "anthropic" | "google" | "openai-compatible"
+  >({
+    message: "Do you want to prepare an optional auxiliary reasoning provider too?",
     choices: [
-      { name: "No enrichment yet", value: "none" },
-      { name: "OpenAI-compatible enrichment scaffold", value: "openai" }
+      { name: "No auxiliary reasoning yet", value: "none" },
+      { name: "OpenAI", value: "openai" },
+      { name: "Anthropic", value: "anthropic" },
+      { name: "Google", value: "google" },
+      { name: "OpenAI-compatible gateway", value: "openai-compatible" }
     ]
   });
 
-  const connector = await select<"none" | "mem0" | "mempalace" | "both">({
+  const connector = await select<"none" | "mem0" | "mempalace" | "obsidian" | "all">({
     message: "Which live connectors should Cognai prepare?",
     choices: [
       { name: "None for now", value: "none" },
       { name: "Mem0 only", value: "mem0" },
       { name: "MemPalace only", value: "mempalace" },
-      { name: "Both Mem0 and MemPalace", value: "both" }
+      { name: "Obsidian only", value: "obsidian" },
+      { name: "All supported connectors", value: "all" }
     ]
   });
+
+  let mempalacePalacePath = "";
+  let mempalaceBackfillScope: "audit_only" | "selected" | "full" = "audit_only";
+  let mempalaceIncludeWings: string[] = [];
+  let mempalaceIncludeRooms: string[] = [];
+
+  if (connector === "mempalace" || connector === "all") {
+    mempalacePalacePath = await input({
+      message: "Where is the MemPalace palace path?",
+      default: ".mempalace"
+    });
+
+    mempalaceBackfillScope = await select<"audit_only" | "selected" | "full">({
+      message: "How much MemPalace content should Cognai semantically backfill at first?",
+      choices: [
+        { name: "Audit only (recommended first run)", value: "audit_only" },
+        { name: "Selected wings / rooms", value: "selected" },
+        { name: "Full semantic backfill", value: "full" }
+      ]
+    });
+
+    if (mempalaceBackfillScope === "selected") {
+      const wings = await input({
+        message: "Optional: comma-separated wing names to include.",
+        default: ""
+      });
+      const rooms = await input({
+        message: "Optional: comma-separated room names or wing/room pairs to include.",
+        default: ""
+      });
+      mempalaceIncludeWings = wings
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+      mempalaceIncludeRooms = rooms
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+    }
+  }
+
+  const obsidianVaultPath =
+    connector === "obsidian" || connector === "all"
+      ? await input({
+          message: "Where is the Obsidian vault path?",
+          default: "Obsidian"
+        })
+      : "";
 
   const seed = await input({
     message:
@@ -75,8 +139,13 @@ export async function runInitPrompts(): Promise<InitPromptAnswers> {
     mode,
     storage,
     embeddingProvider,
-    enrichmentProvider,
+    auxReasoningProvider,
     connector,
+    mempalacePalacePath,
+    mempalaceBackfillScope,
+    mempalaceIncludeWings,
+    mempalaceIncludeRooms,
+    obsidianVaultPath,
     seed,
     importNow
   };

@@ -61,6 +61,7 @@ export interface CognaiEdge {
 export interface CognaiSubgraph {
   telos_anchors: CognaiNode[];
   relevant_nodes: CognaiNode[];
+  relevant_edges: CognaiEdge[];
   active_tensions: CognaiEdge[];
   confidence_floor_met: boolean;
 }

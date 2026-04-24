@@ -1,7 +1,7 @@
 {
   "name": "cognai",
-  "version": "0.1.0",
-  "description": "A local-first MCP server for modeling cognitive architecture.",
+  "version": "0.2.0",
+  "description": "A provider-agnostic MCP reasoning layer between AI clients and user memory systems.",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
@@ -21,15 +21,22 @@
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
     "dev": "tsx src/cli.ts",
-    "test": "node --import tsx --test test/**/*.test.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "eval": "node --import tsx --test test/eval-harness.test.ts test/mcp-integration.test.ts",
+    "smoke:pack": "npm run build && node --import tsx --test test/package-smoke.test.ts",
+    "smoke:providers": "node --import tsx --test test/provider-smoke.test.ts",
+    "test": "node --import tsx --test test/config.test.ts test/connectors.test.ts test/eval-harness.test.ts test/importers.test.ts test/inference-retrieval.test.ts test/mcp-integration.test.ts test/storage.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "verify": "npm run typecheck && npm run test && npm run build && npm run smoke:pack"
   },
   "keywords": [
     "ai",
     "mcp",
     "memory",
     "graph",
-    "cognitive-architecture"
+    "cognitive-architecture",
+    "reasoning-layer",
+    "provider-agnostic",
+    "mempalace"
   ],
   "repository": {
     "type": "git",

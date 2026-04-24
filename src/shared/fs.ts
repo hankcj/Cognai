@@ -21,3 +21,19 @@ export async function readJsonFile<T>(
     return fallback;
   }
 }
+
+export async function readTextFile(
+  path: string,
+  fallback: string = ""
+): Promise<string> {
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    return fallback;
+  }
+}
+
+export async function writeTextFile(path: string, value: string): Promise<void> {
+  await ensureDir(dirname(path));
+  await writeFile(path, value, "utf8");
+}

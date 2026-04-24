@@ -1,0 +1,34 @@
+{
+  "envelope": {
+    "source": "cognai-json",
+    "conversation": {
+      "id": "fixture-contradiction",
+      "metadata": {}
+    },
+    "messages": [
+      {
+        "id": "1",
+        "role": "user",
+        "content": "I believe remote work is healthy and helps me think clearly.",
+        "timestamp": "2026-04-24T12:00:00.000Z",
+        "metadata": {}
+      },
+      {
+        "id": "2",
+        "role": "user",
+        "content": "I believe remote work is unhealthy for me and I should avoid it long term.",
+        "timestamp": "2026-04-24T12:05:00.000Z",
+        "metadata": {}
+      }
+    ],
+    "memory_entries": [],
+    "participants": [],
+    "metadata": {}
+  },
+  "expectations": {
+    "required_types": ["Belief"],
+    "min_tensions": 1,
+    "query": "How should I think about where I work best?",
+    "min_memory_questions": 1
+  }
+}

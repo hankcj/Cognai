@@ -1,19 +1,46 @@
 # Onboarding Walkthrough
 
-This is the current onboarding flow for the local beta.
+This is the current beta onboarding path for Cognai as a reasoning layer between an AI client and a memory system.
 
-## 1. Initialize Cognai
+## Recommended First Run
 
-Run:
+The safest first test is:
+
+1. create a local demo workspace
+2. inspect what Cognai inferred
+3. attach Cognai to your MCP client
+4. only then add MemPalace, Obsidian, or another memory-system integration
+
+That keeps the first test about Cognai itself instead of mixing several systems at once.
+
+## Option 1: One-Command Demo
+
+```bash
+npm run dev -- demo
+```
+
+This creates a demo workspace, writes a sample transcript, syncs it into the graph, and tells you where the config lives.
+
+After that:
+
+```bash
+npm run dev -- inspect --config /absolute/path/to/config.json
+npm run dev -- mcp snippet --config /absolute/path/to/config.json
+npm run dev -- serve --config /absolute/path/to/config.json
+```
+
+## Option 2: Full Manual Setup
+
+### 1. Initialize A Workspace
 
 ```bash
 npm run dev -- init
 ```
 
-You can also do a non-interactive setup:
+Non-interactive setup:
 
 ```bash
-npm run dev -- init --yes --connector both --enrichment-provider openai
+npm run dev -- init --yes --storage surrealdb --embedding-provider none --aux-provider none --connector none
 ```
 
 The guided flow currently asks for:
@@ -21,65 +48,60 @@ The guided flow currently asks for:
 - user vs org mode
 - storage adapter
 - embedding provider
-- optional enrichment provider
-- whether to prepare Mem0, MemPalace, or both connectors
+- auxiliary reasoning provider
+- whether to enable Mem0, MemPalace, Obsidian, or all connectors
+- MemPalace palace path and backfill scope when enabled
+- Obsidian vault path when enabled
 - optional self-description seeding
 
-By default, the recommended path is:
+Recommended defaults for a first run:
 
-- `surrealdb` storage
-- no embeddings yet unless you already have a provider configured
-- no enrichment yet unless you want to test it
-- connectors enabled only if you already know where data will come from
+- `surrealdb`
+- no embeddings
+- no auxiliary reasoning
+- no connectors unless you already use them
 
-## 2. Run A Workspace Check
-
-Run:
+### 2. Run A Workspace Check
 
 ```bash
 npm run dev -- doctor
 ```
 
-This validates:
+This checks:
 
-- config presence
+- config resolution
 - storage startup
-- embedding configuration status
-- enrichment configuration status
+- embeddings readiness
+- auxiliary reasoning readiness
 - connector readiness
+- MemPalace command health when configured
+- Obsidian vault health when configured
 - sync checkpoint state
 
-## 3. Ingest Data
+### 3. Ingest Data
 
-### Option A: Local Transcript Or Export
+Transcript or export:
 
 ```bash
 npm run dev -- sync --transcript /absolute/path/to/input.json
 ```
 
-Supported import paths include:
-
-- canonical Cognai JSON
-- Mem0-shaped exports
-- MemPalace-shaped exports
-
-### Option B: Live Connector Pull
+Connector-assisted pull:
 
 ```bash
 npm run dev -- sync --connector mem0
 npm run dev -- sync --connector mempalace
+npm run dev -- sync --connector obsidian
 ```
 
-If you want scheduled polling enabled while the MCP server is running:
+If you want scheduled polling while the MCP server is running:
 
 ```bash
-npm run dev -- sync --connector mem0 --enable-schedule
 npm run dev -- sync --connector mempalace --enable-schedule
+npm run dev -- sync --connector obsidian --enable-schedule
 ```
 
-## 4. Inspect The Graph
-
-After a sync, inspect what Cognai stored:
+### 4. Inspect What Cognai Learned
 
 ```bash
 npm run dev -- inspect
@@ -91,23 +113,18 @@ Useful follow-ups:
 npm run dev -- inspect --tensions
 npm run dev -- inspect --episodes
 npm run dev -- inspect --sync-state
-```
-
-If you want to inspect one specific node:
-
-```bash
 npm run dev -- inspect --node <node-id>
 ```
 
-## 5. Attach Cognai To MCP
+### 5. Attach Cognai To Your MCP Client
 
-Generate a client snippet:
+Generate snippets:
 
 ```bash
 npm run dev -- mcp snippet
 ```
 
-Start the MCP server:
+Start the server:
 
 ```bash
 npm run dev -- serve
@@ -115,36 +132,44 @@ npm run dev -- serve
 
 If connector `autoSync` is enabled, `serve` will also poll configured connectors on their schedule.
 
-## Suggested First Test
+## What Good Looks Like
 
-For the cleanest first experience:
+After a successful onboarding run, you should be able to:
 
-1. run `init`
-2. run `doctor`
-3. sync a small hand-written transcript first
-4. inspect the graph
-5. only then try Mem0 or MemPalace connector pulls
-6. after the graph looks sane, attach Cognai to your MCP client
+- initialize a workspace without editing JSON by hand
+- ingest a transcript or connector pull
+- inspect values, goals, beliefs, fears, assumptions, and tensions
+- see stored provenance episodes
+- generate MCP snippets
+- start the MCP server locally
 
-That helps separate:
+## When To Add MemPalace
 
-- core graph quality
-- connector quality
-- MCP usefulness
+Add MemPalace after the local transcript path feels sane.
 
-## What “Good” Looks Like
+That order matters because it separates:
 
-After onboarding, you should be able to:
+- Cognai graph quality
+- MemPalace integration quality
+- AI-client orchestration quality
 
-- initialize a workspace without manual file editing
-- ingest at least one transcript or connector pull
-- see values, goals, beliefs, fears, assumptions, and tensions in `inspect`
-- view provenance episodes
-- generate MCP config
-- run the server locally
+If you already use OpenClaw, the healthy product shape is:
+
+- Cognai for reasoning
+- MemPalace for recall
+- OpenClaw for orchestration and answer generation
+
+## When To Add Obsidian
+
+Add Obsidian when you want Cognai to learn from a local vault of Markdown notes.
+
+The current Obsidian path treats each Markdown file as one evidence unit. It preserves the vault path, note path, title, frontmatter, file modified time, and content hash so repeated syncs can dedupe note versions.
 
 ## Current Caveats
 
-- Connector support is real, but still early compared with the local transcript path.
-- Retrieval quality is improving, but you should still inspect the graph rather than blindly trust it.
-- Optional embeddings and enrichment are not required for a useful first run.
+- Cognai is still a beta, not a finished product.
+- The transcript path is the most mature path.
+- MemPalace support is real, but still being hardened around live usage.
+- Obsidian support is local-file based and simpler, but very large vaults still need careful include/exclude scoping.
+- Auxiliary reasoning is optional and additive only.
+- You should still inspect the graph instead of treating it as perfect truth.
