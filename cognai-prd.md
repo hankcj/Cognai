@@ -81,8 +81,8 @@ Cognai is organized into five layers. Each layer has a distinct responsibility a
 │    · confidence decay · contradiction   │
 ├─────────────────────────────────────────┤
 │          Layer 1: Storage               │
-│    KuzuDB · nodes · typed edges ·       │
-│   confidence scores · stated/inferred   │
+│ SurrealDB · nodes · typed edges ·       │
+│  confidence scores · stated/inferred    │
 └─────────────────────────────────────────┘
 ```
 
@@ -98,7 +98,7 @@ The core data structure is a **weighted directed graph** where:
 - **Edges** carry semantic type, direction, confidence score, and provenance
 - **The graph as a whole** represents the user's cognitive architecture at a point in time
 
-The graph is stored in KuzuDB, an embedded graph database that handles both graph traversal and vector embeddings in a single dependency, requiring no external services.
+The graph is stored in **SurrealDB**, the default embedded storage engine for v1. Cognai runs SurrealDB in embedded mode through the official JavaScript SDK and Node engine, allowing the system to store graph relationships, structured records, and vector-searchable embeddings locally without requiring a separate database daemon.
 
 ### 4.2 Node Schema
 
@@ -125,7 +125,7 @@ interface CognaiNode {
   created_at: timestamp
   updated_at: timestamp
   last_reinforced_at: timestamp // used by confidence decay
-  embedding: vector             // generated at write time, stored in Kuzu
+  embedding: vector             // generated at write time, stored in SurrealDB
   metadata: Record<string, any> // user/org defined extensions
 }
 ```
@@ -270,22 +270,25 @@ This makes Cognai feel structurally intelligent from day one — before it knows
 
 ## 5. Layer 1: Storage
 
-### 5.1 Database: KuzuDB
+### 5.1 Database: SurrealDB
 
-Cognai ships with **KuzuDB** as the default embedded graph database.
+Cognai ships with **SurrealDB** as the default embedded storage backend for v1.
 
-**Why KuzuDB:**
-- Purpose-built for graph data — nodes and typed edges are first-class citizens, not a relational workaround
-- Handles both graph traversal queries and vector embeddings in a single dependency
-- Fully embedded — runs inside the npm package, no external service required
-- Node.js bindings available
+**Why SurrealDB:**
+- Supports graph-style relationships, structured records, and vector-search workflows in a single database
+- Runs embedded inside the Node.js application via the official JavaScript SDK and Node engine
+- Requires no separate database daemon for the default local-first install path
+- Supports persistent local storage via SurrealKV-backed paths and ephemeral storage via in-memory mode
 
 **What this means for the install story:**
-`npm install cognai` pulls in KuzuDB as a dependency. No Docker, no running a separate database process, no configuration before first use. The database initializes automatically on `cognai init`.
+`npm install cognai` pulls in the JavaScript SDK and Node engine needed for embedded local operation. No Docker, no running a separate database daemon, and no database configuration before first use. On `cognai init`, Cognai creates a local SurrealKV-backed storage path and initializes the semantic graph, episodic store, and default taxonomy there.
+
+**Important deployment constraint:**
+Embedded SurrealDB is intended for local, single-process use. If future Cognai deployments require shared access across multiple processes or distributed services, Cognai may support remote SurrealDB or other storage adapters later — but that is not the default v1 model.
 
 ### 5.2 Storage Interface Abstraction
 
-While KuzuDB is the default, the storage layer is accessed through an abstract interface so advanced users can swap it out. Any storage adapter must implement:
+While SurrealDB is the default, the storage layer is accessed through an abstract interface so advanced users can swap it out. This abstraction layer remains important both for specialized deployments and to preserve Cognai's plug-and-play posture when infrastructure needs differ across environments. Any storage adapter must implement:
 
 ```typescript
 interface CognaiStorage {
@@ -479,7 +482,7 @@ The CLI provides the developer-facing surface for setup, maintenance, and inspec
 
 ### 9.1 `cognai init`
 
-Initializes a new Cognai instance. Creates the KuzuDB database, sets up the default node taxonomy, and generates a config file.
+Initializes a new Cognai instance. Creates the embedded SurrealDB-backed local data store, sets up the default node taxonomy, and generates a config file.
 
 ```bash
 cognai init
@@ -570,11 +573,11 @@ Typical retrieval output is targeted at 300-600 tokens for most queries, with co
 
 | Dependency | Role | Rationale |
 |---|---|---|
-| KuzuDB | Graph storage + vector embeddings | Embedded, graph-native, zero external services |
+| `surrealdb` + `@surrealdb/node` | Embedded local database runtime | Embedded local operation with structured records, graph-style relationships, and vector-query support in one system |
 | Node.js MCP SDK | MCP server implementation | Standard MCP tooling |
 | OpenAI / Anthropic embedding API (configurable) | Generating node embeddings | Pluggable — user provides API key and preferred provider |
 
-The embedding provider is pluggable from day one. Users configure which embedding API they want to use. Cognai does not ship with a bundled embedding model in v1 to keep the package size manageable, but a local embedding option (e.g. via ollama) is on the roadmap.
+The embedding provider is pluggable from day one. Users configure which embedding API they want to use. SurrealDB provides the local storage and vector-query substrate, but Cognai still owns embedding generation through its configured provider. Cognai does not ship with a bundled embedding model in v1 to keep the package size manageable, but a local embedding option (e.g. via ollama) is on the roadmap.
 
 ---
 

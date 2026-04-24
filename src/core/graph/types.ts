@@ -2,6 +2,8 @@ export type NodeSource = "stated" | "inferred";
 
 export type ConstrualLevel = "high" | "mid" | "low";
 
+export type FlagType = "stale" | "contradicted" | "uncertain" | "needs_review";
+
 export type NodeType =
   | "Value"
   | "Goal"
@@ -33,6 +35,7 @@ export interface CognaiNode {
   type: NodeType;
   label: string;
   description: string;
+  embedding?: number[];
   source: NodeSource;
   confidence: number;
   activation: number;
@@ -60,4 +63,12 @@ export interface CognaiSubgraph {
   relevant_nodes: CognaiNode[];
   active_tensions: CognaiEdge[];
   confidence_floor_met: boolean;
+}
+
+export interface GraphSummary {
+  nodeCount: number;
+  edgeCount: number;
+  episodeCount: number;
+  activeTensionCount: number;
+  topNodeTypes: Array<{ type: NodeType; count: number }>;
 }
